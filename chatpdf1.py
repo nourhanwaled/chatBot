@@ -13,7 +13,7 @@ import time
 COST_PER_1000_TOKENS_GEMINI_BASE = 0.01
 COST_PER_1000_TOKENS_GEMINI_PRO = 0.05
 
-genai.configure(api_key="GOOGLE_API_KEY")
+genai.configure(api_key="AIzaSyCosxAPjrz73sWCDQKSbKvqITMwqcezYhQ")
 
 
 # Extract text from PDF
@@ -71,7 +71,7 @@ def calculate_cost(model, input_text, output_text):
     
     return cost, total_tokens
 
-def is_semantically_similar(new_question, cached_questions, embeddings, threshold=0.8):
+def is_semantically_similar(new_question, cached_questions, embeddings, threshold=0.9):
     """Check if a new question is semantically similar to cached ones."""
     new_embedding = embeddings.embed_query(new_question)
     for cached in cached_questions:
@@ -102,7 +102,7 @@ def user_input(user_question, embeddings):
 
         Answer:
         """
-        model = ChatGoogleGenerativeAI(model="gemini-pro")
+        model = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
         response = model.predict(prompt_template)
     else:
         response = "The answer is not available in the context."
@@ -120,12 +120,12 @@ def user_input(user_question, embeddings):
     else:
         # If no cached answer, save the new question-answer pair in the cache
         st.session_state['question_cache'].append({"question": user_question, "answer": response})
-        st.write("Reply (from Gemini Pro): ", response)
+        st.write("Reply (from gemini-1.5-flash): ", response)
     
     # Print the time and response
     end_time = time.time()
     elapsed_time = end_time - start_time
-    cost, total_tokens = calculate_cost("gemini-pro", user_question, response)
+    cost, total_tokens = calculate_cost("gemini-1.5-flash", user_question, response)
 
     st.write(f"Time taken: {elapsed_time:.2f} seconds")
     st.write(f"Total tokens: {total_tokens}")
