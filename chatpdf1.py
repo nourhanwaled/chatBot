@@ -5,8 +5,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from sklearn.metrics.pairwise import cosine_similarity
 import os
 import time
 
@@ -47,22 +46,18 @@ def load_vector_store(embeddings):
     vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
     return vector_store
 
-def get_relevant_context(query, vector_store):
-    """Retrieve the most relevant context chunk for the query."""
-    results = vector_store.similarity_search(query, k=3) 
+def get_relevant_context(query, vector_store, k=5):
+    """Retrieve the most relevant context chunks for the query."""
+    results = vector_store.similarity_search(query, k=k) 
     context = "\n".join([result.page_content for result in results])
     return context
 
-
-
-
-# Test performance
 def estimate_tokens(text):
-    # A rough estimate: 1 token is roughly equivalent to 4 characters (for English text)
+    """Estimate the number of tokens in text."""
     return len(text) // 4
 
-
 def calculate_cost(model, input_text, output_text):
+    """Calculate the cost of using the model based on tokens."""
     input_tokens = estimate_tokens(input_text)
     output_tokens = estimate_tokens(output_text)
     total_tokens = input_tokens + output_tokens
@@ -76,6 +71,15 @@ def calculate_cost(model, input_text, output_text):
     
     return cost, total_tokens
 
+def is_semantically_similar(new_question, cached_questions, embeddings, threshold=0.8):
+    """Check if a new question is semantically similar to cached ones."""
+    new_embedding = embeddings.embed_query(new_question)
+    for cached in cached_questions:
+        cached_embedding = embeddings.embed_query(cached['question'])
+        similarity = cosine_similarity([new_embedding], [cached_embedding])[0][0]
+        if similarity > threshold:
+            return cached['answer']
+    return None
 
 # Function to handle user input and generate answers
 def user_input(user_question, embeddings):
@@ -91,8 +95,7 @@ def user_input(user_question, embeddings):
     # If context is not empty, pass it into the prompt
     if context:
         prompt_template = f"""
-        Answer the question as detailed as possible from the provided context, make sure to provide all the details. If the answer is not in
-        the provided context just say, "answer is not available in the context". Don't provide a wrong answer.
+        Answer the question based on the following context. If the information is not directly available, try to infer logically. If the answer is still unavailable, respond with "The answer is not available in the context."
 
         Context: {context}
         Question: {user_question}
@@ -102,19 +105,14 @@ def user_input(user_question, embeddings):
         model = ChatGoogleGenerativeAI(model="gemini-pro")
         response = model.predict(prompt_template)
     else:
-        response = "Answer is not available in the context."
+        response = "The answer is not available in the context."
 
     # Cache the response in session state
     if 'question_cache' not in st.session_state:
         st.session_state['question_cache'] = []
     
-    # Check if the current question already exists in cache
-    question_lower = user_question.lower()
-    cached_answer = None
-    for cached in st.session_state['question_cache']:
-        if cached['question'].lower() == question_lower:
-            cached_answer = cached['answer']
-            break
+    # Check if the current question already exists in cache (semantic similarity)
+    cached_answer = is_semantically_similar(user_question, st.session_state['question_cache'], embeddings)
     
     if cached_answer:
         # If a cached answer is found, show it instead of making a new API call
