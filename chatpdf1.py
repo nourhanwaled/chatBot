@@ -14,7 +14,7 @@ import time
 COST_PER_1000_TOKENS_GEMINI_BASE = 0.01
 COST_PER_1000_TOKENS_GEMINI_PRO = 0.05
 
-genai.configure(api_key="AIzaSyCosxAPjrz73sWCDQKSbKvqITMwqcezYhQ")
+genai.configure(api_key="GOOGLE_API_KEY")
 
 
 # Extract text from PDF
