@@ -19,7 +19,7 @@ from credentials import API_KEY
 class ChatPDFApp:
     def __init__(self):
         genai.configure(api_key=API_KEY)
-        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="192.168.1.110")
+        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="localhost")
         self.semantic_cache = SemanticCache(EmbeddingModel().get_embeddings(), threshold=0.75)
         self.vector_store = self.vdb_utils.load_vector_store(EmbeddingModel().get_embeddings())
         self.model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=API_KEY)
