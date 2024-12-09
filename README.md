@@ -23,7 +23,7 @@ Follow these steps to set up and launch the chatbot application:
    - Open a terminal and navigate to the project directory.
    - Run the following command to build and start the application:
      ```bash
-     docker-compose up --build
+     docker compose up --build
      ```
 
 3. **Access the Application:**
