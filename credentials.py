@@ -9,4 +9,3 @@ if API_KEY:
 else:
     print("API Key not set")
     
-API_KEY = "AIzaSyDD_tB4agn1XgLY1myGIfWV0oSG3q9IA3w"
