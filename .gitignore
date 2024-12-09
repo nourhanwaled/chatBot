@@ -1,0 +1,49 @@
+# Virtual Environment
+llmenv/
+llmenv/*
+**/llmenv/
+
+# Python virtual environment binaries and cache
+# Python cache files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+**/*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Environment variables
+.env
+credentials.py
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Qdrant storage
+qdrant_storage/
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+
+# FAISS index
+faiss_index/
+**/faiss_index/

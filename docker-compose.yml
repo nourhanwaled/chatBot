@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  streamlit-app:
+    image: python:3.10-slim  # Use a slim Python image
+    container_name: streamlit_app
+    working_dir: /app
+    volumes:
+      - ./:/app  # Mount the current directory to /app in the container
+    ports:
+      - "8501:8501"  # Expose Streamlit default port
+    environment:
+      - API_KEY=your_api_key_here
+    command: >
+      sh -c "pip install -r requirements.txt && python -m streamlit run chatpdf.py"
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"  # Expose Qdrant's port
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+volumes:
+  qdrant_storage:
+    driver: local
