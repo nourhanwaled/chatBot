@@ -23,7 +23,6 @@ build/
 
 # Environment variables
 .env
-credentials.py
 
 # IDE specific files
 .vscode/
