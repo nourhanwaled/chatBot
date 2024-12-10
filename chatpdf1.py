@@ -120,7 +120,6 @@ class ChatPDFApp:
             Question: {user_question}
             
             Answer: """
-
     def main(self):
         st.header("Chat with PDF && DOCX using Gemini 💬")
 
@@ -138,23 +137,28 @@ class ChatPDFApp:
             if st.button("Process Files"):
                 if uploaded_files:
                     with st.spinner("Processing..."):
-                        raw_text = ""
+                        embeddings = EmbeddingModel().get_embeddings()
+                        all_text_chunks = [] 
+
                         for uploaded_file in uploaded_files:
                             if uploaded_file.name.endswith(".pdf"):
-                                raw_text += DocUtils.get_pdf_text(uploaded_file)
+                                raw_text = DocUtils.get_pdf_text(uploaded_file)
                             elif uploaded_file.name.endswith(".docx"):
-                                raw_text += DocUtils.get_docx_text(uploaded_file)
+                                raw_text = DocUtils.get_docx_text(uploaded_file)
+                            
+                            text_chunks = DocUtils.get_text_chunks(raw_text)
+                            all_text_chunks.extend(text_chunks)  
+                        
+                        self.vdb_utils.create_vector_store(all_text_chunks, embeddings)
 
-                        text_chunks = DocUtils.get_text_chunks(raw_text)
-                        embeddings = EmbeddingModel().get_embeddings()
-                        self.vdb_utils.create_vector_store(text_chunks, embeddings)
                         st.session_state["vector_store_created"] = True
-                        st.success("Files processed and vector store created!")
+                        st.success("Files processed and vector store updated!")
                 else:
                     st.warning("Please upload files before processing.")
 
             if st.button("Clear Cache"):
                 self.semantic_cache.clear_cache()
+                st.success("Cache cleared!")
 
         user_question = st.text_input("Ask a question about the uploaded documents")
 
@@ -162,7 +166,7 @@ class ChatPDFApp:
             embeddings = EmbeddingModel().get_embeddings()
             self.user_input(user_question, embeddings)
         elif user_question:
-            st.warning("Please process the documents or PDFS first before asking questions.")
+            st.warning("Please process the documents or PDFs first before asking questions.")
 
 
 if __name__ == "__main__":
