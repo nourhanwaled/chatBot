@@ -1,4 +1,7 @@
 import streamlit as st
+from PyPDF2 import PdfReader
+from zipfile import ZipFile
+import re
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -15,6 +18,39 @@ from modules.embedding_model.embedding_model import EmbeddingModel
 from modules.cache.semantic_cache import SemanticCache
 from modules.cost_calculator import CostCalculator
 from credentials import API_KEY
+
+# Set page configuration
+st.set_page_config(page_title="Chat with Documents")
+
+
+# Utility class for handling PDF and DOCX files
+class DocUtils:
+    @staticmethod
+    def get_pdf_text(pdf_file):
+        """Extract text from PDF using PyPDF2."""
+        text = ""
+        reader = PdfReader(pdf_file)
+        for page in reader.pages:
+            text += page.extract_text()
+        return text
+
+    @staticmethod
+    def get_docx_text(docx_file):
+        """Extract text from DOCX using zipfile."""
+        text = ""
+        with ZipFile(docx_file) as docx_zip:
+            # Extract the main document XML
+            xml_content = docx_zip.read("word/document.xml").decode("utf-8")
+            # Remove all XML tags
+            cleaned_text = re.sub(r"<[^>]+>", "", xml_content)
+            text += cleaned_text
+        return text
+
+    @staticmethod
+    def get_text_chunks(raw_text):
+        """Dummy function to chunk text."""
+        return [raw_text]  # Replace with actual chunking logic
+
 
 class ChatPDFApp:
     def __init__(self):
@@ -86,36 +122,48 @@ class ChatPDFApp:
             Answer: """
 
     def main(self):
-        st.set_page_config(page_title="Chat with PDF")
-        st.header("Chat with PDF using Gemini 💬")
+        st.header("Chat with PDF && DOCX using Gemini 💬")
 
         if "vector_store_created" not in st.session_state:
             st.session_state["vector_store_created"] = False
 
         with st.sidebar:
-            st.title("Upload PDF")
-            pdf_docs = st.file_uploader("Upload your PDF Files", accept_multiple_files=True)
+            st.title("Upload Documents")
+            uploaded_files = st.file_uploader(
+                "Upload your PDF or DOCX Files", 
+                accept_multiple_files=True, 
+                type=["pdf", "docx"]
+            )
 
-            if st.button("Process PDFs"):
-                if pdf_docs:
+            if st.button("Process Files"):
+                if uploaded_files:
                     with st.spinner("Processing..."):
-                        raw_text = DocUtils.get_pdf_text(pdf_docs)
+                        raw_text = ""
+                        for uploaded_file in uploaded_files:
+                            if uploaded_file.name.endswith(".pdf"):
+                                raw_text += DocUtils.get_pdf_text(uploaded_file)
+                            elif uploaded_file.name.endswith(".docx"):
+                                raw_text += DocUtils.get_docx_text(uploaded_file)
+
                         text_chunks = DocUtils.get_text_chunks(raw_text)
                         embeddings = EmbeddingModel().get_embeddings()
                         self.vdb_utils.create_vector_store(text_chunks, embeddings)
                         st.session_state["vector_store_created"] = True
-                        st.success("PDFs processed and vector store created!")
+                        st.success("Files processed and vector store created!")
                 else:
-                    st.warning("Please upload PDF files before processing.")
+                    st.warning("Please upload files before processing.")
+
             if st.button("Clear Cache"):
                 self.semantic_cache.clear_cache()
-        user_question = st.text_input("Ask a question about the uploaded PDFs")
+
+        user_question = st.text_input("Ask a question about the uploaded documents")
 
         if user_question and st.session_state["vector_store_created"]:
             embeddings = EmbeddingModel().get_embeddings()
             self.user_input(user_question, embeddings)
         elif user_question:
-            st.warning("Please process the PDFs first before asking questions.")
+            st.warning("Please process the documents or PDFS first before asking questions.")
+
 
 if __name__ == "__main__":
     app = ChatPDFApp()
