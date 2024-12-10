@@ -19,8 +19,8 @@ from credentials import API_KEY
 class ChatPDFApp:
     def __init__(self):
         genai.configure(api_key=API_KEY)
-        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="localhost")
-        self.semantic_cache = SemanticCache(EmbeddingModel().get_embeddings(), threshold=0.75)
+        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="qdrant")
+        self.semantic_cache = SemanticCache(EmbeddingModel().get_embeddings(), threshold=0.15)
         self.vector_store = self.vdb_utils.load_vector_store(EmbeddingModel().get_embeddings())
         self.model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=API_KEY)
 
@@ -107,7 +107,8 @@ class ChatPDFApp:
                         st.success("PDFs processed and vector store created!")
                 else:
                     st.warning("Please upload PDF files before processing.")
-
+            if st.button("Clear Cache"):
+                self.semantic_cache.clear_cache()
         user_question = st.text_input("Ask a question about the uploaded PDFs")
 
         if user_question and st.session_state["vector_store_created"]:

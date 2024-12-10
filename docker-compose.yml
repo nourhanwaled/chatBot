@@ -12,7 +12,7 @@ services:
     environment:
       - API_KEY=your_api_key_here
     command: >
-      sh -c "pip install -r requirements.txt && python -m streamlit run chatpdf.py"
+      sh -c "pip install -r requirements.txt && python -m streamlit run chatpdf1.py"
     depends_on:
       - qdrant
 
