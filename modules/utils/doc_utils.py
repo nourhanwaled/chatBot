@@ -2,7 +2,8 @@ from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from typing import List, Union
 from pathlib import Path
-
+from zipfile import ZipFile
+import re
 class DocUtils:
     """Utility class for handling document processing operations."""
     
@@ -35,7 +36,6 @@ class DocUtils:
             cleaned_text = re.sub(r"<[^>]+>", "", xml_content)
             text += cleaned_text
         return text
-        
     @staticmethod 
     def get_text_chunks(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[str]:
         """

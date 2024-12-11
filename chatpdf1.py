@@ -1,7 +1,7 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-from zipfile import ZipFile
-import re
+
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
