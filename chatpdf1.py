@@ -22,36 +22,6 @@ from credentials import API_KEY
 # Set page configuration
 st.set_page_config(page_title="Chat with Documents")
 
-
-# Utility class for handling PDF and DOCX files
-class DocUtils:
-    @staticmethod
-    def get_pdf_text(pdf_file):
-        """Extract text from PDF using PyPDF2."""
-        text = ""
-        reader = PdfReader(pdf_file)
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
-
-    @staticmethod
-    def get_docx_text(docx_file):
-        """Extract text from DOCX using zipfile."""
-        text = ""
-        with ZipFile(docx_file) as docx_zip:
-            # Extract the main document XML
-            xml_content = docx_zip.read("word/document.xml").decode("utf-8")
-            # Remove all XML tags
-            cleaned_text = re.sub(r"<[^>]+>", "", xml_content)
-            text += cleaned_text
-        return text
-
-    @staticmethod
-    def get_text_chunks(raw_text):
-        """Dummy function to chunk text."""
-        return [raw_text]  # Replace with actual chunking logic
-
-
 class ChatPDFApp:
     def __init__(self):
         genai.configure(api_key=API_KEY)

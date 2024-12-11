@@ -24,6 +24,18 @@ class DocUtils:
                 text += page.extract_text()
         return text
 
+    @staticmethod
+    def get_docx_text(docx_file):
+        """Extract text from DOCX using zipfile."""
+        text = ""
+        with ZipFile(docx_file) as docx_zip:
+            # Extract the main document XML
+            xml_content = docx_zip.read("word/document.xml").decode("utf-8")
+            # Remove all XML tags
+            cleaned_text = re.sub(r"<[^>]+>", "", xml_content)
+            text += cleaned_text
+        return text
+        
     @staticmethod 
     def get_text_chunks(text: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[str]:
         """
