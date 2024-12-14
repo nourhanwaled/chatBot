@@ -10,7 +10,6 @@ from langchain.chains import LLMChain
 import os
 import time
 
-# Import utility classes
 from modules.utils.doc_utils import DocUtils
 from modules.vector_database.faiss_vb import FAISSVectorDB
 from modules.vector_database.qdrant_vb import QdrantVectorDB
@@ -18,6 +17,7 @@ from modules.embedding_model.embedding_model import EmbeddingModel
 from modules.cache.semantic_cache import SemanticCache
 from modules.cost_calculator import CostCalculator
 from credentials import API_KEY
+import time
 
 # Set page configuration
 st.set_page_config(page_title="Chat with Documents")
@@ -33,7 +33,7 @@ class ChatPDFApp:
     def user_input(self, user_question, embeddings):
         """Handles the user's input, decides whether to use cached or fresh response."""
         start_time = time.time()
-
+        
         # Step 1: Check cache
         cached_response = self.semantic_cache.ask(user_question)
         if cached_response:
@@ -49,7 +49,6 @@ class ChatPDFApp:
             st.write("No relevant context retrieved!")
             return
         prompt_template = self.get_prompt_template(context, user_question)
-        st.write("Generated Prompt Template:", prompt_template)
 
         try:
             raw_response = self.model.predict(prompt_template)
@@ -69,6 +68,47 @@ class ChatPDFApp:
         # Step 5: Styling and structuring
         styled_response = self.style_output(moderated_response, user_question)
         
+        st.write("Styled Response:", styled_response)
+
+        end_time = time.time()
+        st.write(f"Processing Time: {end_time - start_time:.2f} seconds")
+
+    def check_facts(self, response, context, user_question):
+
+        """Verifies facts in the response against the provided context."""
+        fact_check_prompt = f"""
+            You are a fact-checking assistant. Your task is to verify whether the following response aligns with the context provided. If the response already aligns, confirm it. If not, highlight inaccuracies and provide corrections without altering the meaning.
+
+            Context: {context}
+            Original Response: {response}
+
+            Fact-Checked Response:
+            """
+        return self.model.predict(fact_check_prompt)
+
+
+    def moderate_output(self, response, user_question):
+        """Moderates the response for tone, appropriateness, or clarity."""
+        moderation_prompt = f"""
+            You are a moderation assistant. Refine the response to ensure it is respectful, clear, and appropriate. Do not change the original meaning or factual accuracy.
+
+            Original Response: {response}
+
+            Moderated Response:
+            """
+        return self.model.predict(moderation_prompt)
+
+
+    def style_output(self, response, user_question):
+        """Formats the response for better readability and structure."""
+        style_prompt = f"""
+            You are a formatting assistant. Reformat the following response to improve its readability and presentation. Use bullet points, headings, or structured paragraphs as needed. Ensure that the original meaning and content of the response are not altered.
+
+            Original Response: {response}
+
+            Styled Response:
+        """
+        return self.model.predict(style_prompt)
 
     def get_prompt_template(self, context, user_question):
         """Generates the appropriate prompt template based on context availability."""
@@ -131,7 +171,7 @@ class ChatPDFApp:
 
                         for uploaded_file in uploaded_files:
                             if uploaded_file.name.endswith(".pdf"):
-                                raw_text = DocUtils.get_pdf_text(uploaded_file)
+                                raw_text = DocUtils.get_pdf_text([uploaded_file])
                             elif uploaded_file.name.endswith(".docx"):
                                 raw_text = DocUtils.get_docx_text(uploaded_file)
                             
@@ -139,7 +179,7 @@ class ChatPDFApp:
                             all_text_chunks.extend(text_chunks)  
                         
                         self.vdb_utils.create_vector_store(all_text_chunks, embeddings)
-
+                        
                         st.session_state["vector_store_created"] = True
                         st.success("Files processed and vector store updated!")
                 else:
@@ -160,4 +200,4 @@ class ChatPDFApp:
 
 if __name__ == "__main__":
     app = ChatPDFApp()
-    app.main()      
+    app.main()
