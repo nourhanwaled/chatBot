@@ -33,23 +33,42 @@ class ChatPDFApp:
     def user_input(self, user_question, embeddings):
         """Handles the user's input, decides whether to use cached or fresh response."""
         start_time = time.time()
-        response = self.semantic_cache.ask(user_question)
-        if response:
-            st.write(f"Cached answer: {response}")
-        else:
-            context = self.vdb_utils.get_relevant_context(user_question, self.vector_store)
-            prompt_template = self.get_prompt_template(context, user_question)
-            response = self.model.predict(prompt_template)
-            self.semantic_cache.add_to_cache(user_question, response)
-            st.write("Reply (from Gemini Pro): ", response)
 
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        cost, total_tokens = CostCalculator.calculate_cost("gemini-pro", user_question, response)
+        # Step 1: Check cache
+        cached_response = self.semantic_cache.ask(user_question)
+        if cached_response:
+            st.write("Cached Response Found")
+            moderated_response = self.moderate_output(cached_response, user_question)
+            styled_response = self.style_output(moderated_response, user_question)
+            st.write(f"Cached answer: {styled_response}")
+            return
 
-        st.write(f"Time taken: {elapsed_time:.2f} seconds")
-        st.write(f"Total tokens: {total_tokens}")
-        st.write(f"Estimated cost: ${cost:.4f}")
+        # Step 2: Get context and generate raw response
+        context = self.vdb_utils.get_relevant_context(user_question, self.vector_store)
+        if not context:
+            st.write("No relevant context retrieved!")
+            return
+        prompt_template = self.get_prompt_template(context, user_question)
+        st.write("Generated Prompt Template:", prompt_template)
+
+        try:
+            raw_response = self.model.predict(prompt_template)
+            st.write("Raw Response:", raw_response)
+        except Exception as e:
+            st.write("Error during raw response generation:", e)
+            return
+
+        # Step 3: Fact-checking
+        fact_checked_response = self.check_facts(raw_response, context, user_question)
+        st.write("Fact-Checked Response:", fact_checked_response)
+
+        # Step 4: Moderation
+        moderated_response = self.moderate_output(fact_checked_response, user_question)
+        st.write("Moderated Response:", moderated_response)
+
+        # Step 5: Styling and structuring
+        styled_response = self.style_output(moderated_response, user_question)
+        
 
     def get_prompt_template(self, context, user_question):
         """Generates the appropriate prompt template based on context availability."""
@@ -141,4 +160,4 @@ class ChatPDFApp:
 
 if __name__ == "__main__":
     app = ChatPDFApp()
-    app.main()
+    app.main()      
