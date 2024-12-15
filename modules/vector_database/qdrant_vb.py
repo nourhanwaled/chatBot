@@ -3,7 +3,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 from typing import List, Optional
-
+from langchain.schema import Document
 class QdrantVectorDB:
     """Utility class for handling Qdrant vector database operations."""
 
@@ -17,7 +17,7 @@ class QdrantVectorDB:
             port: Port number of the Qdrant instance
         """
         self.collection_name = collection_name
-        self.qdrant_client = QdrantClient(host=host, port=port)
+        self.qdrant_client = QdrantClient(host=host, port=port, timeout=360)
 
         # Ensure the collection exists in Qdrant
         self._initialize_collection()
@@ -39,7 +39,7 @@ class QdrantVectorDB:
                 vectors_config=VectorParams(size=vector_size, distance=Distance[distance.upper()])
             )
 
-    def create_vector_store(self, text_chunks: List[str], embeddings: GoogleGenerativeAIEmbeddings) -> Qdrant:
+    def create_vector_store(self, docs: List[Document], embeddings: GoogleGenerativeAIEmbeddings) -> Qdrant:
         """
         Creates a Qdrant vector store from text chunks.
 
@@ -51,6 +51,9 @@ class QdrantVectorDB:
             Qdrant: Vector store object
         """
         # Get vector size from first embedding
+        texts = [doc.page_content for doc in docs]      # embedding input
+        metadatas = [doc.metadata for doc in docs]      # store page_number, file_name, etc.
+
         vector_size = len(embeddings.embed_query("test"))
         
         # Create collection with proper configuration
@@ -71,20 +74,23 @@ class QdrantVectorDB:
             embeddings=embeddings,
             vector_name="text_vector"
         )
-        
-        # Add texts with proper metadata
-        texts_with_metadata = [
-            {
-                "text": chunk,
-                "metadata": {"source": "document"}
-            } for chunk in text_chunks
-        ]
-        
-        # Add texts to vector store
         vector_store.add_texts(
-            texts=[t["text"] for t in texts_with_metadata],
-            metadatas=[t["metadata"] for t in texts_with_metadata]
+            texts=texts,
+            metadatas=metadatas,
         )
+        # # Add texts with proper metadata
+        # texts_with_metadata = [
+        #     {
+        #         "text": chunk,
+        #         "metadata": {"source": "document"}
+        #     } for chunk in text_chunks
+        # ]
+        
+        # # Add texts to vector store
+        # vector_store.add_texts(
+        #     texts=[t["text"] for t in texts_with_metadata],
+        #     metadatas=[t["metadata"] for t in texts_with_metadata]
+        # )
         
         return vector_store
 
@@ -131,13 +137,7 @@ class QdrantVectorDB:
             str: Concatenated relevant context
         """
         results = vector_store.similarity_search_with_score(query, k=k)
-        
-        # Filter results above threshold and extract page content
-        filtered_results = [
-            result.page_content 
-            for result, score in results 
-            if score >= score_threshold
-        ]
-        
-        context = "\n".join(filtered_results)
-        return context
+
+        # Filter results above threshold and return the actual Documents
+        filtered_docs = [doc for doc, score in results if score >= score_threshold]
+        return filtered_docs

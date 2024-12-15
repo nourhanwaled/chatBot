@@ -1,6 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-
+import json
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -8,6 +8,8 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 import os
 import time
+from typing import List, Union
+from langchain.schema import Document
 
 from modules.utils.doc_utils import DocUtils
 from modules.vector_database.faiss_vb import FAISSVectorDB
@@ -57,6 +59,7 @@ class ChatPDFApp:
 
         # Step 2: Get context and generate raw response
         context = self.vdb_utils.get_relevant_context(user_question, self.vector_store)
+        print("Context: ", context)
         if not context:
             st.write("No relevant context retrieved!")
             return
@@ -83,6 +86,12 @@ class ChatPDFApp:
         styled_response = self.style_output(moderated_response, user_question)
         st.write("Styled Response:", styled_response)
 
+        annotated_response = self.annotate_answer(user_question,moderated_response, context)
+        if isinstance(annotated_response, dict) and "citations" in annotated_response:
+            for c in annotated_response["citations"]:
+                st.markdown(f"**Doc ID**: {c['doc_id']}")
+                st.markdown(f"**Page Number**: {c.get('page_number')}")
+                st.markdown(f"**Quote**: {c['quote']}")
         end_time = time.time()
         st.write(f"Processing Time: {end_time - start_time:.2f} seconds")
 
@@ -120,7 +129,76 @@ class ChatPDFApp:
             Styled Response:
         """
         return self.model_manager.generate_response(style_prompt)
+    def format_docs_with_id(self, docs: List[Document]):
+        lines = []
+        for i, doc in enumerate(docs):
+            page_num = doc.metadata.get("page_number", "N/A")
+            file_name = doc.metadata.get("file_name", "unknown_file")
+            lines.append(f"Source {i} (Page {page_num} from {file_name}):\n{doc.page_content}\n{'-'*50}")
+        return "\n\n".join(lines)
+    def annotate_answer(self, user_question, answer, context):
+        """
+        Annotate the generated answer with citations from the provided context.
+        We label each document snippet with an ID, then ask the LLM to produce JSON.
+        """
+        if not context:
+            return "No context provided to annotate."
 
+        # Format the context docs with IDs
+        formatted_docs = self.format_docs_with_id(context)
+
+        # Build a prompt that instructs the model to output JSON
+        annotation_prompt = f"""
+    You are an AI assistant specializing in citation annotation. 
+    Given a final answer to a user's question and a set of context documents labeled with IDs, 
+    produce a JSON object that includes citations from these documents which justify the answer.
+
+    The JSON object should have the following structure:
+
+    {{
+    "citations": [
+        {{
+        "doc_id": int, 
+        "page_number": int, 
+        "quote": str
+        }},
+        ...
+    ]
+    }}
+
+    - "doc_id" is the integer ID (from the labeled context) that supports a part of the answer.
+    - "page_number" is the page number of the document where the quote can be found.
+    - "quote" is the EXACT snippet from the document that justifies the answer.
+
+    If multiple parts of the answer come from the same doc, include multiple entries (with the same doc_id but different quotes). 
+    If no direct citations exist for a part of the answer, you may omit it or return an empty list.
+
+    Here are the labeled context documents:
+
+    {formatted_docs}
+
+    Question: {user_question}
+    Answer: {answer}
+
+    Now provide your JSON citations:
+        """
+
+        try:
+            response_text = self.model_manager.generate_response(annotation_prompt)
+            st.write("Raw Annotation LLM Output:", response_text)
+
+            # Parse the response as JSON
+            # If the model follows instructions, we'll get an object with a "citations" key
+            parsed = json.loads(response_text)
+            print("Annotated: ",response_text)
+            return parsed  # e.g., {"citations": [{"doc_id":..., "quote":...}, ...]}
+
+        except json.JSONDecodeError:
+            st.write("Error parsing JSON. Raw output:", response_text)
+            return {"error": "Failed to parse JSON", "raw_output": response_text}
+        except Exception as e:
+            st.write("Error during annotation:", e)
+            return {"error": str(e)}
     def get_prompt_template(self, context, user_question):
         """Generates the appropriate prompt template based on context availability."""
         if context and context != []:
@@ -161,6 +239,7 @@ class ChatPDFApp:
             
             Answer: """
 
+    
     def main(self):
         st.header("Chat with PDF && DOCX using LLMs 💬")
 
@@ -198,23 +277,35 @@ class ChatPDFApp:
                 if uploaded_files:
                     with st.spinner("Processing..."):
                         embeddings = EmbeddingModel().get_embeddings()
-                        all_text_chunks = []
+                        all_text_chunks = []  # This will hold chunked Documents
 
                         for uploaded_file in uploaded_files:
+                            # Check file extension
                             if uploaded_file.name.endswith(".pdf"):
-                                raw_text = DocUtils.get_pdf_text([uploaded_file])
-                            elif uploaded_file.name.endswith(".docx"):
-                                raw_text = DocUtils.get_docx_text(uploaded_file)
-                            
-                            text_chunks = DocUtils.get_text_chunks(raw_text)
-                            all_text_chunks.extend(text_chunks)  
+                                pdf_docs = DocUtils.get_pdf_documents([uploaded_file])
+                                # pdf_docs is a list of Document objects
 
+                                chunked_docs = DocUtils.get_text_chunks(pdf_docs)
+                                # chunked_docs is also a list of Document objects (splits, with metadata)
+
+                                # Extract the text from each chunk
+                                # chunked_strings = [doc.page_content for doc in chunked_docs]
+                                all_text_chunks.extend(chunked_docs)
+                            elif uploaded_file.name.endswith(".docx"):
+                                docx_docs = DocUtils.get_docx_documents(uploaded_file)
+                                chunked_docs = DocUtils.get_text_chunks(docx_docs)
+                                # chunked_strings = [doc.page_content for doc in chunked_docs]
+                                all_text_chunks.extend(chunked_docs)
+
+
+                        # Now all_text_chunks is a list of Document objects (with metadata), ready to be stored
                         self.vdb_utils.create_vector_store(all_text_chunks, embeddings)
                         
                         st.session_state["vector_store_created"] = True
                         st.success("Files processed and vector store updated!")
                 else:
                     st.warning("Please upload files before processing.")
+
 
             # Clear cache
             if st.button("Clear Cache"):
