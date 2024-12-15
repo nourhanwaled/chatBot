@@ -7,9 +7,9 @@ from qdrant_client.http.models import PointStruct, SearchParams
 from qdrant_client.http import models
 import numpy as np
 class SemanticCache:
-    def __init__(self, embedding_model, threshold=0.35):
+    def __init__(self, embedding_model, threshold=0.35, host="qdrant"):
         self.encoder = embedding_model
-        self.cache_client =  QdrantClient(host="qdrant", port=6333) 
+        self.cache_client =  QdrantClient(host=host, port=6333) 
         self.cache_collection_name = "caching"
 
         if not self.collection_exists(self.cache_collection_name):

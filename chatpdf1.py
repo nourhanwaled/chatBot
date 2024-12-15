@@ -1,7 +1,6 @@
 import streamlit as st
 from PyPDF2 import PdfReader
 
-
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -16,19 +15,32 @@ from modules.vector_database.qdrant_vb import QdrantVectorDB
 from modules.embedding_model.embedding_model import EmbeddingModel
 from modules.cache.semantic_cache import SemanticCache
 from modules.cost_calculator import CostCalculator
-from credentials import API_KEY
+from credentials import GOOGLE_API_KEY, GROQ_API_KEY  # Make sure your keys are correct
 import time
+from modules.model.model_manager import ModelManager  # <-- Import your ModelManager
 
 # Set page configuration
 st.set_page_config(page_title="Chat with Documents")
 
 class ChatPDFApp:
     def __init__(self):
-        genai.configure(api_key=API_KEY)
-        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="qdrant")
-        self.semantic_cache = SemanticCache(EmbeddingModel().get_embeddings(), threshold=0.15)
+        # Configure Gemini (if needed, depends on your usage of generativeai)
+        genai.configure(api_key=GOOGLE_API_KEY)
+
+        # Initialize your ModelManager. 
+        # If your ModelManager requires two different keys (Google vs Groq),
+        # you might adapt ModelManager to accept them or store them externally.
+        self.model_manager = ModelManager(google_api_key=GOOGLE_API_KEY, groq_api_key=GROQ_API_KEY)
+
+        # Initialize your vector DB, embedding model, etc.
+        self.vdb_utils = QdrantVectorDB(collection_name="doc_vb", host="qdrant")  # Or "qdrant"
+        self.semantic_cache = SemanticCache(EmbeddingModel().get_embeddings(), threshold=0.15, host="qdrant")
         self.vector_store = self.vdb_utils.load_vector_store(EmbeddingModel().get_embeddings())
-        self.model = ChatGoogleGenerativeAI(model="gemini-pro", google_api_key=API_KEY)
+
+        # -- REMOVED self.model and self.selected_model_name
+        # Because now we rely on model_manager, not a single self.model instance.
+
+    # -- REMOVED the entire `change_model` method, because ModelManager handles switching.
 
     def user_input(self, user_question, embeddings):
         """Handles the user's input, decides whether to use cached or fresh response."""
@@ -48,10 +60,12 @@ class ChatPDFApp:
         if not context:
             st.write("No relevant context retrieved!")
             return
+
         prompt_template = self.get_prompt_template(context, user_question)
 
         try:
-            raw_response = self.model.predict(prompt_template)
+            # Step 2B: Generate response via ModelManager
+            raw_response = self.model_manager.generate_response(prompt_template)
             st.write("Raw Response:", raw_response)
         except Exception as e:
             st.write("Error during raw response generation:", e)
@@ -67,14 +81,12 @@ class ChatPDFApp:
 
         # Step 5: Styling and structuring
         styled_response = self.style_output(moderated_response, user_question)
-        
         st.write("Styled Response:", styled_response)
 
         end_time = time.time()
         st.write(f"Processing Time: {end_time - start_time:.2f} seconds")
 
     def check_facts(self, response, context, user_question):
-
         """Verifies facts in the response against the provided context."""
         fact_check_prompt = f"""
             You are a fact-checking assistant. Your task is to verify whether the following response aligns with the context provided. If the response already aligns, confirm it. If not, highlight inaccuracies and provide corrections without altering the meaning.
@@ -83,9 +95,9 @@ class ChatPDFApp:
             Original Response: {response}
 
             Fact-Checked Response:
-            """
-        return self.model.predict(fact_check_prompt)
-
+        """
+        # Replace self.model.predict with model_manager
+        return self.model_manager.generate_response(fact_check_prompt)
 
     def moderate_output(self, response, user_question):
         """Moderates the response for tone, appropriateness, or clarity."""
@@ -95,20 +107,19 @@ class ChatPDFApp:
             Original Response: {response}
 
             Moderated Response:
-            """
-        return self.model.predict(moderation_prompt)
-
+        """
+        return self.model_manager.generate_response(moderation_prompt)
 
     def style_output(self, response, user_question):
         """Formats the response for better readability and structure."""
         style_prompt = f"""
-            You are a formatting assistant. Reformat the following response to improve its readability and presentation. Use bullet points, headings, or structured paragraphs as needed. Ensure that the original meaning and content of the response are not altered.
+            You are a formatting assistant. Reformat the following response to improve its readability and presentation. Use bullet points, headings, or structured paragraphs as needed. Ensure that the original meaning and content of the response is not altered.
 
             Original Response: {response}
 
             Styled Response:
         """
-        return self.model.predict(style_prompt)
+        return self.model_manager.generate_response(style_prompt)
 
     def get_prompt_template(self, context, user_question):
         """Generates the appropriate prompt template based on context availability."""
@@ -149,9 +160,11 @@ class ChatPDFApp:
             Question: {user_question}
             
             Answer: """
-    def main(self):
-        st.header("Chat with PDF && DOCX using Gemini 💬")
 
+    def main(self):
+        st.header("Chat with PDF && DOCX using LLMs 💬")
+
+        # Maintain a flag to check if the vector store has been created
         if "vector_store_created" not in st.session_state:
             st.session_state["vector_store_created"] = False
 
@@ -163,11 +176,29 @@ class ChatPDFApp:
                 type=["pdf", "docx"]
             )
 
+            # Retrieve model options from ModelManager
+            model_options = list(self.model_manager.models.keys())
+            llm_model = st.selectbox("Choose a model to use:", model_options)
+
+            if "selected_model" not in st.session_state:
+                st.session_state["selected_model"] = llm_model
+
+            if st.session_state["selected_model"] != llm_model:
+                st.session_state["selected_model"] = llm_model
+                self.model_manager.change_model(llm_model)  # Switch the model in the manager
+
+                # Display a confirmation message
+                message_placeholder = st.empty()
+                message_placeholder.success(f"Model switched to {llm_model}!")
+                time.sleep(3)
+                message_placeholder.empty()
+            
+            # Process uploaded files
             if st.button("Process Files"):
                 if uploaded_files:
                     with st.spinner("Processing..."):
                         embeddings = EmbeddingModel().get_embeddings()
-                        all_text_chunks = [] 
+                        all_text_chunks = []
 
                         for uploaded_file in uploaded_files:
                             if uploaded_file.name.endswith(".pdf"):
@@ -177,7 +208,7 @@ class ChatPDFApp:
                             
                             text_chunks = DocUtils.get_text_chunks(raw_text)
                             all_text_chunks.extend(text_chunks)  
-                        
+
                         self.vdb_utils.create_vector_store(all_text_chunks, embeddings)
                         
                         st.session_state["vector_store_created"] = True
@@ -185,6 +216,7 @@ class ChatPDFApp:
                 else:
                     st.warning("Please upload files before processing.")
 
+            # Clear cache
             if st.button("Clear Cache"):
                 self.semantic_cache.clear_cache()
                 st.success("Cache cleared!")

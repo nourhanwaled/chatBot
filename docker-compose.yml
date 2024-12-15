@@ -10,7 +10,8 @@ services:
     ports:
       - "8501:8501"  # Expose Streamlit default port
     environment:
-      - API_KEY=your_api_key_here
+      - GOOGLE_API_KEY=your_google_api_key_here
+      - GROQ_API_KEY=your_groq_api_key_here
     command: >
       sh -c "pip install -r requirements.txt && python -m streamlit run chatpdf1.py"
     depends_on:
